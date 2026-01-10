@@ -16,7 +16,9 @@ This file is a best-effort approach to solving this issue; we will do our best b
 
 ### New API
 
+* (internet) Added support for TCP FACK (Forward Acknowledgement).
 * (applications) New trace sources `SourceApplication::ConnectionSucceeded` and `SourceApplication::ConnectionFailed` have been added to report connection success/failure events.
+* (visualizer) Add support to `LrWpanNetDevice` in the PyViz visualizer.
 
 ### Changes to existing API
 
@@ -31,8 +33,18 @@ This file is a best-effort approach to solving this issue; we will do our best b
 * (network): The address class comparison is now based on std::strong_ordering operator<=> comparison operator.
 * (network): An empty (uninitialized) Address is now printed as "00-00:00".
 * (internet): The function `Ipv4InterfaceAddress::SetBroadcast` has been removed from the codebase because the broadcast address must be built from the IP address and mask.
+* (visualizer): The namespace `visualizer` is now used for PyViz related classes.
+* (visualizer): ``PyViz`` has been reformatted and modernized to current ns-3 standards.
+* (core): The `nstime.h` header does not include anymore `event-id.h`. It is possible that
+code might fail to compile due to this change. Adding an include to `event-id.h` fixes the issue.
 
 ### Changes to build system
+
+* A new `NS3_CLANG_TIDY_FIX`/`--enable-clang-tidy-fix` option was added to use clang-tidy
+static analysis and automatically apply fixes during build. Not every clang-tidy warning/error
+has automatic fixes, and checks are performed only at build time. Thus requiring rebuilding
+things to re-run checks. As an alternative, one can use `./ns3 run clang-tidy`. And to apply
+fixes, use `./ns3 run "clang-tidy -fix"`.
 
 ### Changed behavior
 
