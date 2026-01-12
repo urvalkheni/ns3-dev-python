@@ -258,7 +258,6 @@ def main():
     # Connect cwnd trace after socket is created (after application starts)
     ev_cwnd = ns.cppyy.gbl.pythonMakeEventCwnd(trace_cwnd_callback)
     ns.Simulator.Schedule(ns.Seconds(0.1) + ns.MilliSeconds(1), ev_cwnd)
-    
 
     ns.Simulator.Stop(stopTime + ns.Seconds(1))
     ns.Simulator.Run()
