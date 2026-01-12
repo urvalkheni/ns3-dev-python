@@ -83,7 +83,7 @@ def trace_cwnd_callback(oldval, newval):
     cwnd_file.flush()
 
 
-# C++ wrapper inserted via CPyCppyy (kept logic unchanged)
+# C++ helper functions for scheduling Python callbacks
 ns.cppyy.cppdef(
     r"""
 #include "ns3/simulator.h"
@@ -91,52 +91,23 @@ ns.cppyy.cppdef(
 #include "ns3/queue-disc.h"
 #include "ns3/node.h"
 #include "ns3/config.h"
-#include "CPyCppyy/API.h"
 
 using namespace ns3;
 
 Ptr<FlowMonitor> monitor_ptr;
 Ptr<QueueDisc> qdisc_ptr;
 
-void ThroughputTracerCpp() {
-    PyObject* result = CPyCppyy::Eval("trace_throughput_callback()");
-    if (result) {
-        Py_DECREF(result);
-    }
-    Simulator::Schedule(Seconds(0.2), &ThroughputTracerCpp);
+EventImpl* pythonMakeEvent(void (*f)()) {
+    return MakeEvent(f);
 }
 
-void QueueSizeTracerCpp() {
-    PyObject* result = CPyCppyy::Eval("check_queue_size_callback()");
-    if (result) {
-        Py_DECREF(result);
-    }
-    Simulator::Schedule(Seconds(0.2), &QueueSizeTracerCpp);
-}
-
-void CwndTracerCpp(uint32_t oldval, uint32_t newval) {
-    std::string cmd =
-        "trace_cwnd_callback(" + std::to_string(oldval) + ", " +
-        std::to_string(newval) + ")";
-    CPyCppyy::Exec(cmd.c_str());
-}
-
-void ConnectCwndTrace() {
-    Config::ConnectWithoutContext(
-        "/NodeList/0/$ns3::TcpL4Protocol/SocketList/0/CongestionWindow",
-        MakeCallback(&CwndTracerCpp));
-}
-
-EventImpl* MakeThroughputEvent() {
-    return MakeEvent(&ThroughputTracerCpp);
-}
-
-EventImpl* MakeQueueSizeEvent() {
-    return MakeEvent(&QueueSizeTracerCpp);
-}
-
-EventImpl* MakeCwndConnectEvent() {
-    return MakeEvent(&ConnectCwndTrace);
+EventImpl* pythonMakeEventCwnd(void (*f)(uint32_t, uint32_t)) {
+    auto callback = [f]() {
+        Config::ConnectWithoutContext(
+            "/NodeList/0/$ns3::TcpL4Protocol/SocketList/0/CongestionWindow",
+            MakeCallback(f));
+    };
+    return MakeEvent(callback);
 }
 """
 )
@@ -268,14 +239,26 @@ def main():
     ns.cppyy.gbl.monitor_ptr = monitor
     ns.cppyy.gbl.qdisc_ptr = qdc.Get(0)
 
-    ev_throughput = ns.cppyy.gbl.MakeThroughputEvent()
+    # Define wrapper functions that reschedule themselves
+    def throughput_tracer():
+        trace_throughput_callback()
+        ns.Simulator.Schedule(ns.Seconds(0.2), ns.cppyy.gbl.pythonMakeEvent(throughput_tracer))
+
+    def queue_size_tracer():
+        check_queue_size_callback()
+        ns.Simulator.Schedule(ns.Seconds(0.2), ns.cppyy.gbl.pythonMakeEvent(queue_size_tracer))
+
+    # Schedule initial events
+    ev_throughput = ns.cppyy.gbl.pythonMakeEvent(throughput_tracer)
     ns.Simulator.Schedule(ns.Seconds(0.000001), ev_throughput)
 
-    ev_queue = ns.cppyy.gbl.MakeQueueSizeEvent()
+    ev_queue = ns.cppyy.gbl.pythonMakeEvent(queue_size_tracer)
     ns.Simulator.ScheduleNow(ev_queue)
 
-    ev_cwnd = ns.cppyy.gbl.MakeCwndConnectEvent()
+    # Connect cwnd trace after socket is created (after application starts)
+    ev_cwnd = ns.cppyy.gbl.pythonMakeEventCwnd(trace_cwnd_callback)
     ns.Simulator.Schedule(ns.Seconds(0.1) + ns.MilliSeconds(1), ev_cwnd)
+    
 
     ns.Simulator.Stop(stopTime + ns.Seconds(1))
     ns.Simulator.Run()
