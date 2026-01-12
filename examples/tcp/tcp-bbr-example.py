@@ -97,17 +97,19 @@ using namespace ns3;
 Ptr<FlowMonitor> monitor_ptr;
 Ptr<QueueDisc> qdisc_ptr;
 
-EventImpl* pythonMakeEvent(void (*f)()) {
+// Helper to create event from Python callback without parameters
+EventImpl* pythonMakeEvent(void (*f)())
+{
     return MakeEvent(f);
 }
 
-EventImpl* pythonMakeEventCwnd(void (*f)(uint32_t, uint32_t)) {
-    auto callback = [f]() {
-        Config::ConnectWithoutContext(
-            "/NodeList/0/$ns3::TcpL4Protocol/SocketList/0/CongestionWindow",
-            MakeCallback(f));
-    };
-    return MakeEvent(callback);
+// Helper to connect cwnd callback and create event
+EventImpl* pythonConnectCwndTrace(void (*f)(uint32_t, uint32_t))
+{
+    Config::ConnectWithoutContext(
+        "/NodeList/0/$ns3::TcpL4Protocol/SocketList/0/CongestionWindow",
+        MakeCallback(f));
+    return nullptr;
 }
 """
 )
@@ -241,23 +243,31 @@ def main():
 
     # Define wrapper functions that reschedule themselves
     def throughput_tracer():
+        """Periodic throughput tracer that reschedules itself."""
         trace_throughput_callback()
-        ns.Simulator.Schedule(ns.Seconds(0.2), ns.cppyy.gbl.pythonMakeEvent(throughput_tracer))
+        event = ns.cppyy.gbl.pythonMakeEvent(throughput_tracer)
+        ns.Simulator.Schedule(ns.Seconds(0.2), event)
 
     def queue_size_tracer():
+        """Periodic queue size tracer that reschedules itself."""
         check_queue_size_callback()
-        ns.Simulator.Schedule(ns.Seconds(0.2), ns.cppyy.gbl.pythonMakeEvent(queue_size_tracer))
+        event = ns.cppyy.gbl.pythonMakeEvent(queue_size_tracer)
+        ns.Simulator.Schedule(ns.Seconds(0.2), event)
 
-    # Schedule initial events
-    ev_throughput = ns.cppyy.gbl.pythonMakeEvent(throughput_tracer)
-    ns.Simulator.Schedule(ns.Seconds(0.000001), ev_throughput)
+    # Schedule initial events using pythonMakeEvent
+    event = ns.cppyy.gbl.pythonMakeEvent(throughput_tracer)
+    ns.Simulator.Schedule(ns.Seconds(0.000001), event)
 
-    ev_queue = ns.cppyy.gbl.pythonMakeEvent(queue_size_tracer)
-    ns.Simulator.ScheduleNow(ev_queue)
+    event = ns.cppyy.gbl.pythonMakeEvent(queue_size_tracer)
+    ns.Simulator.ScheduleNow(event)
 
-    # Connect cwnd trace after socket is created (after application starts)
-    ev_cwnd = ns.cppyy.gbl.pythonMakeEventCwnd(trace_cwnd_callback)
-    ns.Simulator.Schedule(ns.Seconds(0.1) + ns.MilliSeconds(1), ev_cwnd)
+    # Connect cwnd trace after socket is created
+    def connect_cwnd_trace():
+        """Connect the cwnd trace callback."""
+        ns.cppyy.gbl.pythonConnectCwndTrace(trace_cwnd_callback)
+
+    event = ns.cppyy.gbl.pythonMakeEvent(connect_cwnd_trace)
+    ns.Simulator.Schedule(ns.Seconds(0.1) + ns.MilliSeconds(1), event)
 
     ns.Simulator.Stop(stopTime + ns.Seconds(1))
     ns.Simulator.Run()
