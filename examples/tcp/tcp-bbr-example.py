@@ -84,7 +84,8 @@ def trace_cwnd_callback(oldval, newval):
 
 
 # C++ helper functions for scheduling Python callbacks
-ns.cppyy.cppdef(r"""
+ns.cppyy.cppdef(
+    r"""
 #include "ns3/simulator.h"
 #include "ns3/flow-monitor-helper.h"
 #include "ns3/queue-disc.h"
@@ -110,7 +111,9 @@ EventImpl* pythonConnectCwndTrace(void (*f)(uint32_t, uint32_t))
         MakeCallback(f));
     return nullptr;
 }
-""")
+"""
+)
+
 
 def main():
     global throughput_file, queue_file, cwnd_file, outdir, prev_time
