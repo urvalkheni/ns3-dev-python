@@ -215,6 +215,12 @@ LteHelper::GetDownlinkSpectrumChannel() const
     return m_downlinkChannel;
 }
 
+Ptr<EpcHelper>
+LteHelper::GetEpcHelper() const
+{
+    return m_epcHelper;
+}
+
 void
 LteHelper::ChannelModelInitialization()
 {
@@ -1174,7 +1180,7 @@ LteHelper::ActivateDedicatedEpsBearer(Ptr<NetDevice> ueDevice, EpsBearer bearer,
  * UE change its RRC state to CONNECTED_NORMALLY, activation
  * function is called and bearer is activated.
  */
-class DrbActivator : public SimpleRefCount<DrbActivator>
+class DrbActivator
 {
   public:
     /**
@@ -1195,7 +1201,7 @@ class DrbActivator : public SimpleRefCount<DrbActivator>
      * @param cellId
      * @param rnti
      */
-    static void ActivateCallback(Ptr<DrbActivator> a,
+    static void ActivateCallback(std::shared_ptr<DrbActivator> a,
                                  std::string context,
                                  uint64_t imsi,
                                  uint16_t cellId,
@@ -1243,7 +1249,7 @@ DrbActivator::DrbActivator(Ptr<NetDevice> ueDevice, EpsBearer bearer)
 }
 
 void
-DrbActivator::ActivateCallback(Ptr<DrbActivator> a,
+DrbActivator::ActivateCallback(std::shared_ptr<DrbActivator> a,
                                std::string context,
                                uint64_t imsi,
                                uint16_t cellId,
@@ -1294,7 +1300,7 @@ LteHelper::ActivateDataRadioBearer(Ptr<NetDevice> ueDevice, EpsBearer bearer)
     std::ostringstream path;
     path << "/NodeList/" << enbLteDevice->GetNode()->GetId() << "/DeviceList/"
          << enbLteDevice->GetIfIndex() << "/LteEnbRrc/ConnectionEstablished";
-    Ptr<DrbActivator> arg = Create<DrbActivator>(ueDevice, bearer);
+    auto arg = std::make_shared<DrbActivator>(ueDevice, bearer);
     Config::Connect(path.str(), MakeBoundCallback(&DrbActivator::ActivateCallback, arg));
 }
 
@@ -1553,8 +1559,9 @@ LteHelper::EnableRlcTraces()
 }
 
 int64_t
-LteHelper::AssignStreams(NetDeviceContainer c, int64_t stream)
+LteHelper::AssignStreams(NetDeviceContainer c, int64_t stream, bool assignEpcStreams)
 {
+    NS_LOG_FUNCTION(this << stream << assignEpcStreams);
     int64_t currentStream = stream;
     if (m_fadingModel && !m_fadingStreamsAssigned)
     {
@@ -1594,7 +1601,7 @@ LteHelper::AssignStreams(NetDeviceContainer c, int64_t stream)
             currentStream += ueMac->AssignStreams(currentStream);
         }
     }
-    if (m_epcHelper)
+    if (m_epcHelper && assignEpcStreams)
     {
         currentStream += m_epcHelper->AssignStreams(currentStream);
     }
